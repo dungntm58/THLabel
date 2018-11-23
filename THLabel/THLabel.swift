@@ -457,12 +457,22 @@ class THLabel: UILabel {
         UIGraphicsBeginImageContextWithOptions(rect.size, false, 0.0)
         let context = UIGraphicsGetCurrentContext()!
         var alphaMask: CGImage? = nil
-        let frame = self.frameRef(from: self.bounds.size)
-        let frameRef = frame.CTFrame
         let hasInnerShadow = self.hasInnerShadow()
         let hasStroke = self.hasStroke()
         let hasGradient = self.hasGradient()
         let needsMask = hasGradient || (hasStroke && self.strokePosition == .inside) || hasInnerShadow
+        
+        let frameRef: CTFrame
+        if hasStroke && strokePosition == .outside {
+            var frame = self.bounds.size
+            frame.width += strokeSizeDependentOnStrokePosition()
+            frame.height += strokeSizeDependentOnStrokePosition()
+            frameRef = self.frameRef(from: frame).CTFrame
+        }
+        else {
+            let cframe = self.frameRef(from: self.bounds.size)
+            frameRef = cframe.CTFrame
+        }
         
         context.translateBy(x: 0.0, y: rect.height)
         context.scaleBy(x: 1.0, y: -1.0)
@@ -495,12 +505,20 @@ class THLabel: UILabel {
                 context.clip(to: rect, mask: alphaMask!)
             }
             
-            // Draw stroke.
-            let strokeImage = self.strokeImage(with: rect, frameRef: frameRef, strokeSize: self.strokeSizeDependentOnStrokePosition(), stroke: self.strokeColor)
-            context.draw(strokeImage, in: rect)
             if self.strokePosition == .outside {
+                var frame = rect
+                frame.size.width += strokeSizeDependentOnStrokePosition()
+                frame.size.height += strokeSizeDependentOnStrokePosition()
+                // Draw stroke.
+                let strokeImage = self.strokeImage(with: frame, frameRef: frameRef, strokeSize: self.strokeSizeDependentOnStrokePosition(), stroke: self.strokeColor)
+                context.draw(strokeImage, in: rect)
                 // Draw the saved image over half of the stroke.
                 context.draw(image!, in: rect)
+            }
+            else {
+                // Draw stroke.
+                let strokeImage = self.strokeImage(with: rect, frameRef: frameRef, strokeSize: self.strokeSizeDependentOnStrokePosition(), stroke: self.strokeColor)
+                context.draw(strokeImage, in: rect)
             }
             // Clean up.
             context.restoreGState()
@@ -508,8 +526,7 @@ class THLabel: UILabel {
         let image = UIGraphicsGetImageFromCurrentImageContext()!
         UIGraphicsEndImageContext()
         image.draw(in: rect)
-        
-        super.drawText(in: CGRect(x: rect.origin.x + strokeSize, y: rect.origin.y + strokeSize, width: rect.width - 2 * strokeSize, height: rect.height - 2 * strokeSize))
+        super.drawText(in: rect)
     }
     
     fileprivate func frameRef(from size: CGSize) -> (CTFrame: CTFrame, CGRect: CGRect) {
@@ -738,5 +755,66 @@ class THLabel: UILabel {
         case .byTruncatingTail: return .byTruncatingTail;
         case .byTruncatingMiddle: return .byTruncatingMiddle;
         }
+    }
+}
+
+func croppedAlphaImageFrame(from cgImage: CGImage) -> CGRect {
+    let height = cgImage.height
+    let width = cgImage.width
+    
+    let pixelData = cgImage.dataProvider!.data
+    let data: UnsafePointer<UInt8> = CFDataGetBytePtr(pixelData)
+    
+    var minX = width
+    var minY = height
+    var maxX: Int = 0
+    var maxY: Int = 0
+    
+    //Filter through data and look for non-transparent pixels.
+    for y in 0..<height {
+        for x in 0..<width {
+            let pixelIndex = (width * y + x) * 4 /* 4 for A, R, G, B */
+            
+            if data[pixelIndex] != 0 { //Alpha value is not zero pixel is not transparent.
+                if x < minX {
+                    minX = x
+                }
+                if x > maxX {
+                    maxX = x
+                }
+                if y < minY {
+                    minY = y
+                }
+                if y > maxY {
+                    maxY = y
+                }
+            }
+        }
+    }
+    
+    return CGRect(x: minX, y: minY, width: maxX-minX, height: maxY-minY)
+}
+
+func createARGBBitmapContext(from cgImage: CGImage) -> CGContext? {
+    let width = cgImage.width
+    let height = cgImage.height
+    
+    let bitmapBytesPerRow = width * 4
+    let bitmapByteCount = bitmapBytesPerRow * height
+    
+    let colorSpace = CGColorSpaceCreateDeviceRGB()
+    let bitmapData = malloc(bitmapByteCount)
+    if bitmapData == nil {
+        return nil
+    }
+    
+    let context = CGContext (data: bitmapData, width: width, height: height, bitsPerComponent: 8, bytesPerRow: bitmapBytesPerRow, space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue)
+    
+    return context
+}
+
+extension CGSize {
+    func scale(w: CGFloat, h: CGFloat) -> CGSize {
+        return CGSize(width: width * w, height: height * h)
     }
 }
