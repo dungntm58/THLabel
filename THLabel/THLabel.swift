@@ -492,6 +492,24 @@ class THLabel: UILabel {
             context.restoreGState()
         }
         
+        // -------
+        // Step 7: Draw shadow.
+        // -------
+        let hasShadow = self.hasInnerShadow()
+        if hasShadow {
+            context.saveGState()
+            // Create an image from the text.
+            let image = context.makeImage()
+            // Clear the content.
+            context.clear(rect)
+            // Set shadow attributes.
+            context.setShadow(offset: self.innerShadowOffset, blur: self.innerShadowBlur, color: self.innerShadowColor.cgColor)
+            // Draw the saved image, which throws off a shadow.
+            context.draw(image!, in: rect)
+            // Clean up.
+            context.restoreGState()
+        }
+        
         if hasStroke {
             context.saveGState()
             context.setTextDrawingMode(.stroke)
@@ -523,9 +541,11 @@ class THLabel: UILabel {
             // Clean up.
             context.restoreGState()
         }
+        
         let image = UIGraphicsGetImageFromCurrentImageContext()!
         UIGraphicsEndImageContext()
         image.draw(in: rect)
+        
         super.drawText(in: rect)
     }
     
