@@ -453,9 +453,7 @@ class THLabel: UILabel {
 //        image.draw(in: rect)
 //    }
     
-    open override func draw(_ rect: CGRect) {
-        UIGraphicsBeginImageContextWithOptions(rect.size, false, 0.0)
-        let context = UIGraphicsGetCurrentContext()!
+    func drawStroke(_ rect: CGRect, context: CGContext) {
         var alphaMask: CGImage? = nil
         let hasInnerShadow = self.hasInnerShadow()
         let hasStroke = self.hasStroke()
@@ -474,8 +472,6 @@ class THLabel: UILabel {
             frameRef = cframe.CTFrame
         }
         
-        context.translateBy(x: 0.0, y: rect.height)
-        context.scaleBy(x: 1.0, y: -1.0)
         // -------
         // Step 2: Prepare mask.
         // -------
@@ -489,24 +485,6 @@ class THLabel: UILabel {
             alphaMask = context.makeImage()
             // Clear the content.
             context.clear(rect)
-            context.restoreGState()
-        }
-        
-        // -------
-        // Step 7: Draw shadow.
-        // -------
-        let hasShadow = self.hasInnerShadow()
-        if hasShadow {
-            context.saveGState()
-            // Create an image from the text.
-            let image = context.makeImage()
-            // Clear the content.
-            context.clear(rect)
-            // Set shadow attributes.
-            context.setShadow(offset: self.innerShadowOffset, blur: self.innerShadowBlur, color: self.innerShadowColor.cgColor)
-            // Draw the saved image, which throws off a shadow.
-            context.draw(image!, in: rect)
-            // Clean up.
             context.restoreGState()
         }
         
@@ -541,12 +519,47 @@ class THLabel: UILabel {
             // Clean up.
             context.restoreGState()
         }
+    }
+    
+    func drawShadow(_ rect: CGRect, context: CGContext) {
+        // -------
+        // Step 7: Draw shadow.
+        // -------
+        let hasShadow = self.hasInnerShadow()
+        if hasShadow {
+            context.saveGState()
+            // Create an image from the text.
+            let image = context.makeImage()
+            // Clear the content.
+            context.clear(rect)
+            // Set shadow attributes.
+            context.setShadow(offset: self.innerShadowOffset, blur: self.innerShadowBlur, color: self.innerShadowColor.cgColor)
+            // Draw the saved image, which throws off a shadow.
+            context.draw(image!, in: rect)
+            // Clean up.
+            context.restoreGState()
+        }
+    }
+    
+    open override func draw(_ rect: CGRect) {
+        UIGraphicsBeginImageContextWithOptions(rect.size, false, 0.0)
+        let context = UIGraphicsGetCurrentContext()!
+        
+        context.translateBy(x: 0.0, y: rect.height)
+        context.scaleBy(x: 1.0, y: -1.0)
+        drawStroke(rect, context: context)
+        
+        context.translateBy(x: 0.0, y: rect.height)
+        context.scaleBy(x: 1.0, y: -1.0)
+        super.drawText(in: rect)
+        
+        context.translateBy(x: 0.0, y: rect.height)
+        context.scaleBy(x: 1.0, y: -1.0)
+        drawShadow(rect, context: context)
         
         let image = UIGraphicsGetImageFromCurrentImageContext()!
         UIGraphicsEndImageContext()
         image.draw(in: rect)
-        
-        super.drawText(in: rect)
     }
     
     fileprivate func frameRef(from size: CGSize) -> (CTFrame: CTFrame, CGRect: CGRect) {
